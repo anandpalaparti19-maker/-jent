@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JENT — Job Search Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-0: #020617;
+      --bg-1: #0f172a;
+      --bg-2: #1e293b;
+      --bg-3: #334155;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #475569;
+      --accent-blue: #3b82f6;
+      --accent-purple: #8b5cf6;
+      --accent-indigo: #6366f1;
+      --accent-green: #22c55e;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --border: #1e293b;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 24px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-0);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated background ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 900px 600px at 20% 0%, rgba(99,102,241,0.08) 0%, transparent 70%),
+        radial-gradient(ellipse 700px 500px at 80% 100%, rgba(139,92,246,0.06) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-1); }
+    ::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 3px; }
+
+    /* ── Layout ── */
+    .app { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 0 24px 60px; }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 28px 0 24px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .logo-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, var(--accent-indigo), var(--accent-purple));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 0 20px rgba(99,102,241,0.4);
+    }
+    .logo-text { line-height: 1; }
+    .logo-name { font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
+    .logo-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+    .last-updated { font-size: 12px; color: var(--text-muted); }
+    .refresh-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      background: var(--bg-2);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all .2s;
+      font-family: inherit;
+    }
+    .refresh-btn:hover { background: var(--bg-3); color: var(--text-primary); }
+
+    /* ── Nav tabs ── */
+    .nav {
+      display: flex;
+      gap: 4px;
+      background: var(--bg-1);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-md);
+      padding: 4px;
+      margin-bottom: 28px;
+      width: fit-content;
+    }
+    .nav-tab {
+      padding: 8px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all .2s;
+      border: none;
+      background: none;
+      font-family: inherit;
+    }
+    .nav-tab.active {
+      background: linear-gradient(135deg, var(--accent-indigo), var(--accent-purple));
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(99,102,241,0.4);
+    }
+    .nav-tab:hover:not(.active) { color: var(--text-primary); background: var(--bg-2); }
+
+    /* ── Views ── */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ── Stats grid ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .stat-card {
+      background: var(--bg-1);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-lg);
+      padding: 22px 24px;
+      position: relative;
+      overflow: hidden;
+      transition: transform .2s, box-shadow .2s;
+    }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--card-color, var(--accent-indigo))15 0%, transparent 60%);
+      opacity: 0.08;
+      pointer-events: none;
+    }
+    .stat-icon { font-size: 24px; margin-bottom: 12px; }
+    .stat-label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); margin-bottom: 6px; }
+    .stat-value { font-size: 36px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+    .stat-sub { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+
+    /* ── Charts section ── */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    @media (max-width: 720px) { .charts-row { grid-template-columns: 1fr; } }
+
+    .panel {
+      background: var(--bg-1);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+    }
+    .panel-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── Source bars ── */
+    .source-bar-row { margin-bottom: 10px; }
+    .source-bar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .source-name { font-size: 13px; color: var(--text-primary); }
+    .source-count { font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .source-bar-track { height: 6px; background: var(--bg-3); border-radius: 99px; overflow: hidden; }
+    .source-bar-fill { height: 100%; border-radius: 99px; transition: width 0.8s cubic-bezier(.4,0,.2,1); }
+
+    /* ── Cycle sparkline ── */
+    .sparkline-container { height: 80px; position: relative; }
+    canvas#sparkline { width: 100%; height: 100%; }
+
+    /* ── Jobs view ── */
+    .jobs-toolbar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .search-box {
+      flex: 1;
+      min-width: 200px;
+      position: relative;
+    }
+    .search-box input {
+      width: 100%;
+      padding: 10px 16px 10px 40px;
+      background: var(--bg-1);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .search-box input:focus { border-color: var(--accent-indigo); }
+    .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 15px; }
+    .filter-select {
+      padding: 10px 14px;
+      background: var(--bg-1);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      cursor: pointer;
+    }
+    .score-filter { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+    .score-filter input[type=range] { accent-color: var(--accent-indigo); cursor: pointer; }
+    .results-count { font-size: 13px; color: var(--text-muted); }
+
+    /* ── Job cards ── */
+    .jobs-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .job-card {
+      background: var(--bg-1);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-md);
+      padding: 20px 24px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: start;
+      transition: all .2s;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+    }
+    .job-card:hover {
+      border-color: rgba(99,102,241,0.3);
+      background: var(--bg-2);
+      transform: translateX(3px);
+    }
+    .job-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary); }
+    .job-company { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
+    .job-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .badge-source { background: rgba(99,102,241,.15); color: #a5b4fc; }
+    .badge-location { background: rgba(34,197,94,.1); color: #86efac; }
+    .badge-date { background: rgba(148,163,184,.1); color: var(--text-muted); }
+    .job-score-col { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+    .score-ring {
+      width: 56px;
+      height: 56px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .score-ring svg { transform: rotate(-90deg); }
+    .score-ring-label {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .apply-link {
+      font-size: 12px;
+      color: var(--accent-indigo);
+      text-decoration: none;
+      padding: 4px 10px;
+      border: 1px solid rgba(99,102,241,0.3);
+      border-radius: 6px;
+      transition: all .2s;
+      white-space: nowrap;
+    }
+    .apply-link:hover { background: rgba(99,102,241,0.15); }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+    .empty-state .emoji { font-size: 48px; margin-bottom: 16px; }
+    .empty-state h3 { font-size: 18px; color: var(--text-secondary); margin-bottom: 8px; }
+    .empty-state p { font-size: 14px; max-width: 400px; margin: 0 auto; }
+
+    /* ── Log view ── */
+    .log-container {
+      background: var(--bg-1);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .log-lines {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.8;
+      padding: 16px 20px;
+      max-height: 600px;
+      overflow-y: auto;
+      color: var(--text-secondary);
+    }
+    .log-line { transition: background .1s; padding: 0 4px; border-radius: 3px; }
+    .log-line:hover { background: rgba(255,255,255,0.04); }
+    .log-line.level-error { color: #fca5a5; }
+    .log-line.level-warn { color: #fcd34d; }
+    .log-line.level-info { color: var(--text-secondary); }
+    .log-line span.log-ts { color: var(--text-muted); }
+    .log-line span.log-level-tag { font-weight: 600; }
+
+    /* ── Loading ── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-3) 50%, var(--bg-2) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: var(--radius-sm);
+    }
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      background: var(--bg-2);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      color: var(--text-primary);
+      z-index: 1000;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all .3s cubic-bezier(.4,0,.2,1);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    /* ── Subscription styles ── */
+    .sub-paywall {
+      max-width: 520px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .sub-price-badge {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2));
+      border: 1px solid rgba(99,102,241,0.4);
+      border-radius: 99px;
+      padding: 6px 20px;
+      margin-bottom: 20px;
+    }
+    .sub-price-badge .currency { font-size: 18px; color: #a5b4fc; font-weight: 700; }
+    .sub-price-badge .amount   { font-size: 40px; color: #fff; font-weight: 800; letter-spacing: -.03em; }
+    .sub-price-badge .period   { font-size: 14px; color: #94a3b8; }
+    .sub-features {
+      list-style: none;
+      margin: 20px 0 28px;
+      text-align: left;
+      display: inline-block;
+    }
+    .sub-features li {
+      padding: 6px 0;
+      font-size: 14px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .sub-features li::before { content: '✓'; color: #22c55e; font-weight: 700; }
+    .sub-form input {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--bg-2);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      margin-bottom: 12px;
+      transition: border-color .2s;
+    }
+    .sub-form input:focus { border-color: var(--accent-indigo); }
+    .pay-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #4f46e5, #7c3aed);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      font-family: inherit;
+      letter-spacing: .02em;
+      transition: all .2s;
+      box-shadow: 0 4px 20px rgba(99,102,241,0.4);
+    }
+    .pay-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 28px rgba(99,102,241,0.55); }
+    .pay-btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+    .sub-active-card {
+      background: linear-gradient(135deg, rgba(34,197,94,0.08), rgba(16,185,129,0.06));
+      border: 1px solid rgba(34,197,94,0.25);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    .sub-alert-banner {
+      background: rgba(245,158,11,0.08);
+      border: 1px solid rgba(245,158,11,0.25);
+      border-radius: var(--radius-md);
+      padding: 12px 18px;
+      font-size: 13px;
+      color: #fcd34d;
+      margin-bottom: 20px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Header ── -->
+  <header class="header">
+    <div class="logo">
+      <div class="logo-icon">🎯</div>
+      <div class="logo-text">
+        <div class="logo-name">JENT</div>
+        <div class="logo-sub">Job Search Agent Dashboard</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="status-dot" title="Dashboard connected"></div>
+      <span class="last-updated" id="lastUpdated">—</span>
+      <button class="refresh-btn" onclick="loadAll()">⟳ Refresh</button>
+    </div>
+  </header>
+
+  <!-- Nav -->
+  <nav class="nav">
+    <button class="nav-tab active" onclick="showView('overview', this)">📊 Overview</button>
+    <button class="nav-tab" onclick="showView('jobs', this)">💼 Matches</button>
+    <button class="nav-tab" onclick="showView('applied', this)">✅ Applied</button>
+    <button class="nav-tab" onclick="showView('resume', this)">📄 Resume</button>
+    <button class="nav-tab" onclick="showView('log', this)">📋 Log</button>
+    <button class="nav-tab" id="subNavTab" onclick="showView('subscription', this)">💳 Subscription</button>
+  </nav>
+
+  <!-- Subscription alert banner (shown when not subscribed) -->
+  <div class="sub-alert-banner" id="subAlertBanner">
+    ⚠️ <strong>No active subscription.</strong> Job notifications are paused.
+    <a href="#" onclick="showView('subscription', document.getElementById('subNavTab')); return false;"
+      style="color:#fbbf24;margin-left:8px;text-decoration:underline">Subscribe for ₹75/month →</a>
+  </div>
+
+  <!-- ══ Overview View ══ -->
+  <div id="view-overview" class="view active">
+    <div class="stats-grid" id="statsGrid">
+      <!-- filled by JS -->
+    </div>
+    <div class="charts-row">
+      <div class="panel">
+        <div class="panel-title">📡 Top Sources</div>
+        <div id="sourceBars"><!-- filled --></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">📈 New Matches per Cycle</div>
+        <div class="sparkline-container">
+          <canvas id="sparkline"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">🕐 Recent Cycles</div>
+      <div id="cycleTable"><!-- filled --></div>
+    </div>
+  </div>
+
+  <!-- ══ Jobs View ══ -->
+  <div id="view-jobs" class="view">
+    <div class="jobs-toolbar">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search jobs, companies…" oninput="filterJobs()" />
+      </div>
+      <select class="filter-select" id="sourceFilter" onchange="filterJobs()">
+        <option value="">All Sources</option>
+      </select>
+      <div class="score-filter">
+        <span>Min score:</span>
+        <input type="range" id="scoreFilter" min="0" max="50" value="0" step="1" oninput="updateScoreLabel(); filterJobs()" />
+        <span id="scoreLabel">0%</span>
+      </div>
+      <span class="results-count" id="resultsCount">— jobs</span>
+    </div>
+    <div class="jobs-grid" id="jobsGrid"><!-- filled --></div>
+  </div>
+
+  <!-- Applied Jobs View -->
+  <div id="view-applied" class="view">
+    <div class="panel" style="margin-bottom:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div class="panel-title">✅ Auto-Applied Jobs</div>
+        <button class="refresh-btn" onclick="loadApplied()">⟳ Refresh</button>
+      </div>
+      <div id="appliedContent">Loading…</div>
+    </div>
+  </div>
+
+  <!-- Resume Upload View -->
+  <div id="view-resume" class="view">
+    <div class="panel" style="max-width:600px;margin:0 auto">
+      <div class="panel-title" style="margin-bottom:20px">📄 Resume</div>
+
+      <!-- Current resume status -->
+      <div id="resumeStatus" style="margin-bottom:28px"></div>
+
+      <!-- Drop zone -->
+      <div id="dropZone" style="
+        border: 2px dashed rgba(99,102,241,0.4);
+        border-radius: 16px;
+        padding: 48px 32px;
+        text-align: center;
+        cursor: pointer;
+        transition: all .2s;
+        background: rgba(99,102,241,0.04);
+      "
+        onclick="document.getElementById('resumeInput').click()"
+        ondragover="event.preventDefault();this.style.borderColor='#6366f1';this.style.background='rgba(99,102,241,0.10)'"
+        ondragleave="this.style.borderColor='rgba(99,102,241,0.4)';this.style.background='rgba(99,102,241,0.04)'"
+        ondrop="handleDrop(event)"
+      >
+        <div style="font-size:48px;margin-bottom:12px">📄</div>
+        <div style="font-size:16px;font-weight:600;color:var(--text-primary);margin-bottom:6px">Drop your resume here</div>
+        <div style="font-size:13px;color:var(--text-muted)">or click to browse — PDF or DOCX accepted</div>
+        <input type="file" id="resumeInput" accept=".pdf,.docx,.doc" style="display:none" onchange="uploadResume(this.files[0])">
+      </div>
+
+      <!-- Upload progress / result -->
+      <div id="uploadResult" style="margin-top:20px"></div>
+
+      <div style="margin-top:28px;padding:16px;background:rgba(255,255,255,0.03);border-radius:12px;font-size:13px;color:var(--text-muted);line-height:1.6">
+        <strong style="color:var(--text-secondary)">How it works:</strong><br>
+        After upload, the agent parses your resume on the next cycle and uses it to score and auto-apply to matching jobs.
+        The higher the match score, the better the fit.
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Log View ══ -->
+  <div id="view-log" class="view">
+    <div class="log-container">
+      <div class="log-header">
+        <span class="panel-title" style="margin:0">📋 Agent Log (last 150 lines)</span>
+        <button class="refresh-btn" onclick="loadLog()">⟳ Refresh log</button>
+      </div>
+      <div class="log-lines" id="logLines">Loading…</div>
+    </div>
+  </div>
+
+  <!-- ══ Subscription View ══ -->
+  <div id="view-subscription" class="view">
+    <div class="panel" style="max-width:580px;margin:0 auto">
+      <div class="panel-title" style="margin-bottom:24px">💳 Subscription</div>
+
+      <!-- Active subscription card -->
+      <div id="subActiveCard" style="display:none">
+        <div class="sub-active-card">
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px">
+            <span style="font-size:36px">✅</span>
+            <div>
+              <div style="font-size:18px;font-weight:700;color:#22c55e">Active Subscription</div>
+              <div style="font-size:13px;color:var(--text-muted);margin-top:2px">JENT Job Agent · Monthly Plan</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+            <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:14px">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:4px">Subscriber</div>
+              <div style="font-size:14px;font-weight:600" id="subActiveEmail">—</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:14px">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:4px">Days Remaining</div>
+              <div style="font-size:14px;font-weight:600;color:#22c55e" id="subDaysLeft">—</div>
+            </div>
+          </div>
+          <div style="font-size:13px;color:var(--text-muted);line-height:1.6">
+            🔄 Your subscription renews monthly. Renew by subscribing again before expiry.
+          </div>
+        </div>
+
+        <!-- Renew section -->
+        <div style="margin-top:20px;padding:18px;background:rgba(99,102,241,0.05);border:1px solid rgba(99,102,241,0.15);border-radius:12px">
+          <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">Want to renew early or subscribe another email?</div>
+          <div class="sub-form" id="renewForm">
+            <input type="text"  id="renewName"  placeholder="Your name" />
+            <input type="email" id="renewEmail" placeholder="Email address" />
+            <input type="tel"   id="renewPhone" placeholder="Phone (optional)" />
+            <button class="pay-btn" id="renewBtn" onclick="startPayment('renewName','renewEmail','renewPhone','renewBtn')">
+              🔄 Renew — ₹75/month
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Paywall (not subscribed) -->
+      <div id="subPaywall" style="display:none">
+        <div class="sub-paywall">
+          <div style="font-size:32px;margin-bottom:12px">🎯</div>
+          <h2 style="font-size:24px;font-weight:800;margin-bottom:8px">Activate JENT Agent</h2>
+          <p style="font-size:14px;color:var(--text-muted);margin-bottom:20px;line-height:1.6">
+            Subscribe to unlock automated job notifications. The agent scans 11+ job sources
+            every 2 hours and emails/messages you only the best matches.
+          </p>
+
+          <div class="sub-price-badge">
+            <span class="currency">₹</span>
+            <span class="amount">75</span>
+            <span class="period">/month</span>
+          </div>
+
+          <ul class="sub-features">
+            <li>11 job sources scanned every 2 hours</li>
+            <li>AI resume matching (TF-IDF cosine similarity)</li>
+            <li>Instant notifications via Gmail / Telegram / Discord</li>
+            <li>Internshala, LinkedIn, Unstop, RemoteOK &amp; more</li>
+            <li>Optional auto-apply on Internshala &amp; Indeed</li>
+            <li>Local dashboard at localhost:8765</li>
+          </ul>
+
+          <div class="sub-form" id="subForm">
+            <input type="text"  id="subInputName"  placeholder="Your name" />
+            <input type="email" id="subInputEmail" placeholder="Email address *" required />
+            <input type="tel"   id="subInputPhone" placeholder="Phone number (optional)" />
+            <button class="pay-btn" id="payBtn" onclick="startPayment('subInputName','subInputEmail','subInputPhone','payBtn')">
+              🔒 Pay ₹75 &amp; Activate
+            </button>
+          </div>
+
+          <p style="font-size:11px;color:var(--text-muted);margin-top:14px;line-height:1.6">
+            Secured by Cashfree Payments · UPI, Cards, Netbanking accepted<br>
+            Cancel anytime — just don't renew next month.
+          </p>
+        </div>
+      </div>
+
+      <!-- Loading state -->
+      <div id="subLoading" style="text-align:center;padding:40px;color:var(--text-muted)">
+        <div style="font-size:32px;margin-bottom:12px">⏳</div>
+        Checking subscription status…
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let allJobs = [];
+let statsData = {};
+const COLORS = ['#6366f1','#8b5cf6','#3b82f6','#22c55e','#f59e0b','#f43f5e','#06b6d4','#84cc16'];
+
+// ── Routing ───────────────────────────────────────────────────────────────────
+function showView(name, btn) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`view-${name}`).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'log') loadLog();
+  if (name === 'applied') loadApplied();
+  if (name === 'resume') loadResumeStatus();
+}
+
+// ── Data loading ──────────────────────────────────────────────────────────────
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+async function loadAll() {
+  try {
+    const [statsResp, jobsResp] = await Promise.all([
+      fetchJSON('/api/stats'),
+      fetchJSON('/api/jobs'),
+    ]);
+    statsData = statsResp;
+    allJobs = jobsResp.jobs;
+    renderOverview(statsData);
+    renderJobs(allJobs);
+    document.getElementById('lastUpdated').textContent =
+      'Updated ' + new Date().toLocaleTimeString();
+    showToast('✓ Data refreshed');
+  } catch (e) {
+    showToast('⚠ Could not connect to agent API — is the server running?', true);
+    console.error(e);
+  }
+}
+
+// ── Overview rendering ────────────────────────────────────────────────────────
+function renderOverview(data) {
+  const lastCycle = data.last_cycle || {};
+  const cycles = data.recent_cycles || [];
+
+  // Stats cards
+  const cards = [
+    { icon: '👁', label: 'Total Jobs Seen', value: (data.total_seen || 0).toLocaleString(), sub: 'across all sources', color: '#6366f1' },
+    { icon: '🎯', label: 'Matches Found', value: (data.total_matches || 0).toLocaleString(), sub: 'above score threshold', color: '#22c55e' },
+    { icon: '✅', label: 'Auto-Applied', value: (data.total_applied || 0).toLocaleString(), sub: 'applications sent', color: '#f59e0b' },
+    { icon: '🔄', label: 'Cycles Run', value: (cycles.length || 0).toLocaleString(), sub: 'since last reset', color: '#8b5cf6' },
+    { icon: '🆕', label: 'Last Cycle Matches', value: (lastCycle.new_matches ?? '—'), sub: lastCycle.timestamp ? fmtAgo(lastCycle.timestamp) : 'No cycles yet', color: '#3b82f6' },
+    { icon: '📥', label: 'Last Cycle Fetched', value: (lastCycle.total_fetched ?? '—'), sub: 'total listings', color: '#f43f5e' },
+  ];
+
+  document.getElementById('statsGrid').innerHTML = cards.map(c => `
+    <div class="stat-card" style="--card-color:${c.color}">
+      <div class="stat-icon">${c.icon}</div>
+      <div class="stat-label">${c.label}</div>
+      <div class="stat-value" style="color:${c.color}">${c.value}</div>
+      <div class="stat-sub">${c.sub}</div>
+    </div>
+  `).join('');
+
+  // Source bars
+  const sources = data.source_breakdown || {};
+  const maxCount = Math.max(...Object.values(sources), 1);
+  const sortedSources = Object.entries(sources).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  document.getElementById('sourceBars').innerHTML = sortedSources.map(([name, count], i) => `
+    <div class="source-bar-row">
+      <div class="source-bar-header">
+        <span class="source-name">${name}</span>
+        <span class="source-count">${count}</span>
+      </div>
+      <div class="source-bar-track">
+        <div class="source-bar-fill" style="width:${(count/maxCount*100).toFixed(1)}%;background:${COLORS[i%COLORS.length]}"></div>
+      </div>
+    </div>
+  `).join('') || '<div style="color:var(--text-muted);font-size:13px">No data yet — run the agent first.</div>';
+
+  // Sparkline
+  drawSparkline(cycles.map(c => c.new_matches || 0));
+
+  // Cycle table
+  const recentCycles = [...cycles].reverse().slice(0, 10);
+  document.getElementById('cycleTable').innerHTML = recentCycles.length ? `
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="color:var(--text-muted);text-align:left">
+          <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Time</th>
+          <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Fetched</th>
+          <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Unseen</th>
+          <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Passed Filters</th>
+          <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">New Matches</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${recentCycles.map((c,i) => `
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04);${i===0?'background:rgba(99,102,241,0.05)':''}">
+            <td style="padding:10px 12px;color:var(--text-secondary)">${fmtAgo(c.timestamp)}</td>
+            <td style="padding:10px 12px">${c.total_fetched ?? '—'}</td>
+            <td style="padding:10px 12px">${c.unseen ?? '—'}</td>
+            <td style="padding:10px 12px">${c.passed_location_filter ?? '—'}</td>
+            <td style="padding:10px 12px;color:${(c.new_matches||0)>0?'#22c55e':'var(--text-muted)'};font-weight:${(c.new_matches||0)>0?'700':'400'}">${c.new_matches ?? 0}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  ` : '<div style="color:var(--text-muted);font-size:13px;padding:12px 0">No cycle data yet.</div>';
+}
+
+// ── Sparkline canvas ──────────────────────────────────────────────────────────
+function drawSparkline(data) {
+  const canvas = document.getElementById('sparkline');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 80 * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = 80;
+
+  if (!data.length) return;
+  const max = Math.max(...data, 1);
+  const pad = 10;
+  const pts = data.map((v, i) => ({
+    x: pad + (i / Math.max(data.length - 1, 1)) * (W - pad * 2),
+    y: H - pad - (v / max) * (H - pad * 2),
+  }));
+
+  // Gradient fill
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, 'rgba(99,102,241,0.4)');
+  grad.addColorStop(1, 'rgba(99,102,241,0)');
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, H - pad);
+  pts.forEach(p => ctx.lineTo(p.x, p.y));
+  ctx.lineTo(pts[pts.length - 1].x, H - pad);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+  ctx.strokeStyle = '#6366f1';
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Dots
+  pts.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#6366f1';
+    ctx.fill();
+  });
+}
+
+// ── Jobs rendering ────────────────────────────────────────────────────────────
+function renderJobs(jobs) {
+  // Populate source filter
+  const sources = [...new Set(jobs.map(j => j.source))].sort();
+  const sel = document.getElementById('sourceFilter');
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="">All Sources</option>' +
+    sources.map(s => `<option value="${s}" ${s===currentVal?'selected':''}>${s}</option>`).join('');
+
+  filterJobs();
+}
+
+function filterJobs() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const src = document.getElementById('sourceFilter').value;
+  const minScore = parseInt(document.getElementById('scoreFilter').value) / 100;
+
+  let filtered = allJobs.filter(j => {
+    if (j.score < minScore) return false;
+    if (src && j.source !== src) return false;
+    if (q && !`${j.title} ${j.company}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  document.getElementById('resultsCount').textContent = `${filtered.length} job${filtered.length !== 1 ? 's' : ''}`;
+
+  if (!filtered.length) {
+    document.getElementById('jobsGrid').innerHTML = `
+      <div class="empty-state">
+        <div class="emoji">🔍</div>
+        <h3>No matches found</h3>
+        <p>Try adjusting your filters, or run the agent with <code>python job_search_agent.py --once</code> to fetch fresh listings.</p>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('jobsGrid').innerHTML = filtered.map(j => jobCard(j)).join('');
+}
+
+function jobCard(j) {
+  const pct = Math.min(j.score * 250, 100).toFixed(0);
+  const color = j.score >= 0.40 ? '#22c55e' : j.score >= 0.25 ? '#f59e0b' : j.score >= 0.12 ? '#6366f1' : '#94a3b8';
+  const r = 22, circ = 2 * Math.PI * r;
+  const dash = ((pct / 100) * circ).toFixed(1);
+  const dateStr = j.found_at ? fmtAgo(j.found_at) : '';
+  const loc = j.location ? `<span class="badge badge-location">📍 ${esc(j.location)}</span>` : '';
+
+  return `
+    <a class="job-card" href="${esc(j.url)}" target="_blank" rel="noopener">
+      <div>
+        <div class="job-title">${esc(j.title)}</div>
+        <div class="job-company">${esc(j.company || '—')}</div>
+        <div class="job-meta">
+          <span class="badge badge-source">📡 ${esc(j.source)}</span>
+          ${loc}
+          ${dateStr ? `<span class="badge badge-date">🕐 ${dateStr}</span>` : ''}
+        </div>
+      </div>
+      <div class="job-score-col">
+        <div class="score-ring">
+          <svg width="56" height="56" viewBox="0 0 56 56">
+            <circle cx="28" cy="28" r="${r}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4"/>
+            <circle cx="28" cy="28" r="${r}" fill="none" stroke="${color}" stroke-width="4"
+              stroke-dasharray="${dash} ${circ.toFixed(1)}" stroke-linecap="round"/>
+          </svg>
+          <div class="score-ring-label" style="color:${color}">${(j.score*100).toFixed(0)}%</div>
+        </div>
+        <span class="apply-link" onclick="event.stopPropagation()">Apply →</span>
+      </div>
+    </a>`;
+}
+
+function updateScoreLabel() {
+  const val = document.getElementById('scoreFilter').value;
+  document.getElementById('scoreLabel').textContent = val + '%';
+}
+
+// ── Log rendering ─────────────────────────────────────────────────────────────
+async function loadLog() {
+  const container = document.getElementById('logLines');
+  container.textContent = 'Loading…';
+  try {
+    const data = await fetchJSON('/api/log?n=150');
+    if (!data.lines.length) {
+      container.innerHTML = '<span style="color:var(--text-muted)">No log file yet. Run the agent first.</span>';
+      return;
+    }
+    container.innerHTML = data.lines.map(line => {
+      const cls = line.includes('[ERROR]') ? 'level-error' : line.includes('[WARNING]') ? 'level-warn' : 'level-info';
+      const tagged = line
+        .replace(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/, '<span class="log-ts">$1</span>')
+        .replace(/\[(INFO|WARNING|ERROR|CRITICAL)\]/, '<span class="log-level-tag">[$1]</span>');
+      return `<div class="log-line ${cls}">${tagged}</div>`;
+    }).join('');
+    container.scrollTop = container.scrollHeight;
+  } catch (e) {
+    container.innerHTML = '<span style="color:#fca5a5">Could not load log — is the server running?</span>';
+  }
+}
+
+// ── Resume upload ──────────────────────────────────────────────────────────
+async function loadResumeStatus() {
+  try {
+    const data = await fetchJSON('/api/resume-status');
+    const el = document.getElementById('resumeStatus');
+    if (!el) return;
+    if (data.has_resume) {
+      const r = data.resume;
+      el.innerHTML = `
+        <div style="display:flex;align-items:center;gap:14px;padding:16px 20px;
+          background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);
+          border-radius:12px">
+          <span style="font-size:28px">📄</span>
+          <div>
+            <div style="font-weight:600;color:#22c55e">${esc(r.filename)}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:3px">${r.size_kb} KB — uploaded ${fmtAgo(r.modified)}</div>
+          </div>
+          <span style="margin-left:auto;font-size:11px;padding:4px 10px;
+            background:rgba(34,197,94,0.15);color:#22c55e;
+            border-radius:6px;font-weight:600">ACTIVE</span>
+        </div>`;
+    } else {
+      el.innerHTML = `
+        <div style="padding:14px 18px;background:rgba(244,63,94,0.08);
+          border:1px solid rgba(244,63,94,0.2);border-radius:12px;
+          font-size:13px;color:#fca5a5">
+          ⚠️ No resume uploaded yet. The agent uses a generic keyword profile until you upload one.
+        </div>`;
+    }
+  } catch(e) {}
+}
+
+async function uploadResume(file) {
+  if (!file) return;
+  const resultEl = document.getElementById('uploadResult');
+  resultEl.innerHTML = `<div style="color:var(--text-muted);font-size:13px">Uploading…</div>`;
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const resp = await fetch('/api/upload-resume', { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (data.success) {
+      resultEl.innerHTML = `
+        <div style="padding:14px 18px;background:rgba(34,197,94,0.08);
+          border:1px solid rgba(34,197,94,0.2);border-radius:12px;
+          font-size:13px;color:#22c55e">
+          ✓ <strong>${esc(data.filename)}</strong> uploaded (${data.size_kb} KB). ${esc(data.message)}
+        </div>`;
+      loadResumeStatus();
+      showToast('Resume uploaded!');
+    } else {
+      resultEl.innerHTML = `<div style="color:#fca5a5;font-size:13px">⚠ ${esc(data.error)}</div>`;
+    }
+  } catch(e) {
+    resultEl.innerHTML = `<div style="color:#fca5a5;font-size:13px">⚠ Upload failed: ${e.message}</div>`;
+  }
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  const dz = document.getElementById('dropZone');
+  dz.style.borderColor = 'rgba(99,102,241,0.4)';
+  dz.style.background = 'rgba(99,102,241,0.04)';
+  const file = e.dataTransfer.files[0];
+  if (file) uploadResume(file);
+}
+
+// ── Applied jobs ────────────────────────────────────────────────────────────
+async function loadApplied() {
+  const el = document.getElementById('appliedContent');
+  if (!el) return;
+  try {
+    const data = await fetchJSON('/api/applied-jobs');
+    if (!data.jobs.length) {
+      el.innerHTML = `<div style="color:var(--text-muted);font-size:13px;padding:12px 0">
+        No auto-applied jobs yet. Enable <code>auto_apply_enabled: true</code> in config.yaml and add your resume.
+      </div>`;
+      return;
+    }
+    const statusColor = { submitted: '#22c55e', skipped: '#f59e0b', failed: '#f43f5e' };
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="color:var(--text-muted);text-align:left">
+        <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Job</th>
+        <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Company</th>
+        <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Platform</th>
+        <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Score</th>
+        <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Applied</th>
+        <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Status</th>
+      </tr></thead>
+      <tbody>
+        ${data.jobs.map(j => `
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+            <td style="padding:10px 12px"><a href="${esc(j.url)}" target="_blank" style="color:var(--text-primary);text-decoration:none">${esc(j.title)}</a></td>
+            <td style="padding:10px 12px;color:var(--text-secondary)">${esc(j.company)}</td>
+            <td style="padding:10px 12px;color:var(--text-muted)">${esc(j.source)}</td>
+            <td style="padding:10px 12px">${((j.score||0)*100).toFixed(0)}%</td>
+            <td style="padding:10px 12px;color:var(--text-muted)">${fmtAgo(j.applied_at)}</td>
+            <td style="padding:10px 12px">
+              <span style="padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;
+                background:${statusColor[j.status]||'#6366f1'}22;
+                color:${statusColor[j.status]||'#6366f1'}">
+                ${(j.status||'unknown').toUpperCase()}
+              </span>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+  } catch(e) {
+    el.innerHTML = `<span style="color:#fca5a5">Failed to load applied jobs.</span>`;
+  }
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function fmtAgo(iso) {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.borderColor = isError ? 'rgba(244,63,94,0.4)' : 'rgba(255,255,255,0.1)';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadAll();
+checkSubscriptionStatus();
+// Auto-refresh every 60 seconds
+setInterval(loadAll, 60000);
+
+// ── Subscription ──────────────────────────────────────────────────────────────
+let _subData = null;
+let _pendingOrderId = null;
+let _pendingEmail = null;
+
+async function checkSubscriptionStatus() {
+  try {
+    _subData = await fetchJSON('/api/subscription-status');
+    _renderSubscriptionView(_subData);
+
+    // Show alert banner if subscription required but not active
+    const banner = document.getElementById('subAlertBanner');
+    if (banner && _subData.subscription_required && !_subData.active) {
+      banner.style.display = 'block';
+    }
+
+    // Handle ?sub=success redirect from Cashfree
+    const urlParams = new URLSearchParams(window.location.search);
+    const subParam = urlParams.get('sub');
+    if (subParam === 'success') {
+      showToast('🎉 Subscription activated! Bot is now running.');
+      window.history.replaceState({}, '', '/');
+    } else if (subParam === 'pending') {
+      showToast('⏳ Payment pending. Refreshing status…', false);
+      setTimeout(checkSubscriptionStatus, 5000);
+      window.history.replaceState({}, '', '/');
+    }
+  } catch(e) {
+    console.warn('Subscription status check failed:', e);
+  }
+}
+
+function _renderSubscriptionView(data) {
+  const loading   = document.getElementById('subLoading');
+  const paywall   = document.getElementById('subPaywall');
+  const activeCard = document.getElementById('subActiveCard');
+  if (!loading) return;
+
+  loading.style.display = 'none';
+
+  if (data.active) {
+    activeCard.style.display = 'block';
+    paywall.style.display = 'none';
+    document.getElementById('subActiveEmail').textContent = data.email || '—';
+    document.getElementById('subDaysLeft').textContent =
+      data.days_left != null ? `${data.days_left} days` : 'Active';
+  } else {
+    activeCard.style.display = 'none';
+    paywall.style.display = 'block';
+  }
+}
+
+async function startPayment(nameId, emailId, phoneId, btnId) {
+  const name  = document.getElementById(nameId)?.value?.trim() || '';
+  const email = document.getElementById(emailId)?.value?.trim() || '';
+  const phone = document.getElementById(phoneId)?.value?.trim() || '';
+  const btn   = document.getElementById(btnId);
+
+  if (!email || !email.includes('@')) {
+    showToast('⚠ Please enter a valid email address', true);
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Creating order…';
+
+  try {
+    const orderData = await fetch('/api/create-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, phone }),
+    }).then(r => r.json());
+
+    if (orderData.error) {
+      showToast('⚠ ' + orderData.error, true);
+      btn.disabled = false;
+      btn.textContent = '🔒 Pay ₹75 & Activate';
+      return;
+    }
+
+    _pendingOrderId = orderData.order_id;
+    _pendingEmail   = email;
+
+    // Load Cashfree JS SDK dynamically
+    await _loadScript('https://sdk.cashfree.com/js/v3/cashfree.js');
+
+    const cashfree = Cashfree({ mode: orderData.env === 'prod' ? 'production' : 'sandbox' });
+    cashfree.checkout({
+      paymentSessionId: orderData.payment_session_id,
+      redirectTarget: '_self',
+    });
+
+    btn.textContent = '⏳ Redirecting to Cashfree…';
+  } catch(err) {
+    showToast('⚠ Payment failed: ' + err.message, true);
+    btn.disabled = false;
+    btn.textContent = '🔒 Pay ₹75 & Activate';
+  }
+}
+
+function _loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+</script>
+</body>
+</html>

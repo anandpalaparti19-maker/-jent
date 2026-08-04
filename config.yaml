@@ -1,0 +1,135 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# JENT Job Search Agent — Configuration File (config.yaml)
+# ─────────────────────────────────────────────────────────────────────────────
+# All values here can be overridden by environment variables (env vars win).
+# Edit this file and restart the agent for changes to take effect.
+# Strings that contain special characters should be quoted.
+
+# ── Database ──────────────────────────────────────────────────────────────────
+mongodb_uri: "mongodb://localhost:27017/jent"
+default_user_id: "default_user"
+
+# ── Matching ──────────────────────────────────────────────────────────────────
+# Minimum TF-IDF cosine similarity (0–1) to consider a job a match.
+# Raise for stricter/fewer results; lower for broader/more results.
+similarity_threshold: 0.08
+
+# Multiplier applied to the score when the job title itself contains a
+# top resume keyword (signals a strong positional match).
+title_boost_multiplier: 1.4
+
+# Seniority level keywords — job must contain at least one of these
+# to pass the level filter. Set to [] to disable and see all seniority levels.
+level_filters:
+  - intern
+  - internship
+  - entry level
+  - junior
+  - new grad
+  - graduate
+
+# ── Location ──────────────────────────────────────────────────────────────────
+# If true, prefer remote listings (jobs with blank or "Remote" location pass).
+prefer_remote: true
+
+# Additional location strings to accept (case-insensitive, partial match).
+# Includes India cities so Internshala/Unstop listings pass the filter.
+preferred_locations:
+  - "India"
+  - "Bangalore"
+  - "Mumbai"
+  - "Delhi"
+  - "Hyderabad"
+  - "Chennai"
+  - "Pune"
+  - "Remote"
+
+# ── Scheduling ────────────────────────────────────────────────────────────────
+# How often (in hours) to check for new jobs in 24/7 loop mode.
+check_interval_hours: 2
+
+# ── Resume ────────────────────────────────────────────────────────────────────
+# Path to your resume PDF or DOCX. Relative paths are resolved from the
+# directory containing this config file.
+resume_path: resume.pdf
+
+# ── Delivery: Gmail (direct SMTP — no Zapier needed) ─────────────────────────
+# Generate an App Password at: https://myaccount.google.com/apppasswords
+# (Requires 2-Step Verification. This is NOT your Google password.)
+gmail_address: ""          # e.g. "you@gmail.com"
+gmail_app_password: ""     # 16-char app password, no spaces
+gmail_to_address: ""       # defaults to gmail_address if blank
+force_direct_gmail: false  # if true, skips Zapier even if configured
+
+# ── Delivery: Zapier (optional — adds Sheets/Slack logging etc.) ──────────────
+zapier_webhook_url: "PASTE_YOUR_ZAPIER_CATCH_HOOK_URL_HERE"
+
+# ── Delivery: Telegram (free, instant — recommended) ─────────────────────────
+# 1. Message @BotFather on Telegram → /newbot → copy the token
+# 2. Start your bot, then get chat_id from: https://api.telegram.org/bot<TOKEN>/getUpdates
+telegram_bot_token: ""
+telegram_chat_id: ""
+
+# ── Delivery: Discord webhook (free, instant) ─────────────────────────────────
+# Server Settings → Integrations → Webhooks → New Webhook → Copy URL
+discord_webhook_url: ""
+
+# ── Company Watchlists (Greenhouse / Lever ATS) ───────────────────────────────
+# Track specific companies directly on their ATS. Find the slug from their
+# careers URL: boards.greenhouse.io/stripe → "stripe"
+greenhouse_company_slugs: []
+# greenhouse_company_slugs:
+#   - stripe
+#   - airbnb
+#   - notion
+
+lever_company_slugs: []
+# lever_company_slugs:
+#   - netflix
+#   - vercel
+
+# ── Browser Scrapers (Internshala / Indeed / Unstop) ──────────────────────────
+# Set browser_enabled to true to activate Playwright-based scrapers.
+# First run will open a browser window for you to log in manually.
+# Session is saved — all future runs are headless.
+browser_enabled: true
+browser_headless: false   # set to false to watch the browser (useful for debugging)
+
+# Indeed search settings
+indeed_query: "software engineer intern"   # what to search for
+indeed_location: "India"                   # or "Remote", "Bangalore", "Delhi", etc.
+
+# Unstop: include hackathons and competitions alongside jobs/internships?
+unstop_include_hackathons: true
+
+# -- Auto-Apply ---------------------------------------------------------------
+# Automatically apply to matched jobs on Internshala, Indeed, and Unstop.
+# Only fires for jobs with score >= auto_apply_threshold AND on a supported platform.
+# Upload your resume via the dashboard first, then enable this.
+auto_apply_enabled: false
+auto_apply_threshold: 0.25
+auto_apply_platforms:
+  - internshala
+  - indeed
+  - unstop
+
+# Cover letter -- placeholders filled from your resume:
+#   {title}, {company}, {level}, {top_skills}, {name}
+cover_letter_template: >
+  Hi, I am a {level} student with strong skills in {top_skills}.
+  I am very interested in the {title} role at {company} and believe
+  my background makes me a strong candidate. Please find my resume attached.
+  Looking forward to hearing from you!
+
+# ── Subscription (Cashfree Payments) ─────────────────────────────────────────
+# JENT requires an active ₹75/month subscription to send job notifications.
+# Sign up via the dashboard at http://localhost:8765 → Subscription tab.
+#
+# Cashfree credentials — get yours at https://merchant.cashfree.com
+# Use "test" env for testing (no real money), "prod" for live payments.
+cashfree_app_id: "YOUR_CASHFREE_APP_ID"
+cashfree_secret_key: "YOUR_CASHFREE_SECRET_KEY"
+cashfree_env: "test"          # "test" (sandbox) or "prod" (live)
+subscription_amount: 75       # ₹ per month
+subscription_required: true   # set to false to bypass subscription check (dev mode)
+

@@ -1,0 +1,36 @@
+# systemd service - makes the agent run 24/7, survive reboots, and
+# auto-restart itself if it ever crashes.
+#
+# SETUP:
+#   1. Edit the paths below (WorkingDirectory, ExecStart, User) to match
+#      your machine. Find your python3 path with: which python3
+#   2. Copy this file:
+#        sudo cp job_agent.service /etc/systemd/system/job_agent.service
+#   3. Reload systemd and enable it:
+#        sudo systemctl daemon-reload
+#        sudo systemctl enable job_agent
+#        sudo systemctl start job_agent
+#   4. Check status / logs:
+#        sudo systemctl status job_agent
+#        journalctl -u job_agent -f
+
+[Unit]
+Description=Continuous Job Search Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/full/path/to/job_agent
+Environment="ZAPIER_WEBHOOK_URL=https://hooks.zapier.com/hooks/catch/xxxxx/xxxxx/"
+Environment="GMAIL_ADDRESS=you@gmail.com"
+Environment="GMAIL_APP_PASSWORD=xxxxxxxxxxxxxxxx"
+Environment="RESUME_PATH=resume.pdf"
+Environment="CHECK_INTERVAL_HOURS=2"
+ExecStart=/usr/bin/python3 /full/path/to/job_agent/job_search_agent.py
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
