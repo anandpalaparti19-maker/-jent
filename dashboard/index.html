@@ -483,9 +483,173 @@
       margin-bottom: 20px;
       display: none;
     }
+
+    /* ── Live terminal ── */
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #22c55e;
+      background: rgba(34,197,94,0.12);
+      border: 1px solid rgba(34,197,94,0.3);
+      border-radius: 99px;
+      padding: 3px 10px;
+      letter-spacing: .04em;
+    }
+    .live-badge .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      animation: livePulse 1.2s infinite;
+    }
+    @keyframes livePulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50% { opacity: .4; transform: scale(.8); }
+    }
+    .log-line.log-new {
+      animation: logFadeIn .4s ease;
+    }
+    @keyframes logFadeIn {
+      from { background: rgba(99,102,241,0.15); }
+      to   { background: transparent; }
+    }
+
+    /* ── Email onboarding modal ── */
+    .email-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2,6,23,0.85);
+      backdrop-filter: blur(8px);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeInBackdrop .3s ease;
+    }
+    @keyframes fadeInBackdrop {
+      from { opacity: 0; } to { opacity: 1; }
+    }
+    .email-modal-backdrop.hidden { display: none; }
+    .email-modal {
+      background: var(--bg-1);
+      border: 1px solid rgba(99,102,241,0.3);
+      border-radius: 24px;
+      padding: 40px 36px;
+      max-width: 440px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(99,102,241,0.1);
+      animation: slideUpModal .35s cubic-bezier(.4,0,.2,1);
+      position: relative;
+    }
+    @keyframes slideUpModal {
+      from { opacity: 0; transform: translateY(32px) scale(.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .email-modal-icon {
+      font-size: 56px;
+      margin-bottom: 16px;
+      display: block;
+      filter: drop-shadow(0 0 20px rgba(99,102,241,0.5));
+    }
+    .email-modal h2 {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+      letter-spacing: -.02em;
+    }
+    .email-modal p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .email-modal-input {
+      width: 100%;
+      padding: 13px 16px;
+      background: var(--bg-2);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-size: 15px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+      margin-bottom: 12px;
+    }
+    .email-modal-input:focus {
+      border-color: var(--accent-indigo);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+    .email-modal-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #4f46e5, #7c3aed);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      font-family: inherit;
+      letter-spacing: .03em;
+      transition: all .2s;
+      box-shadow: 0 4px 20px rgba(99,102,241,0.4);
+    }
+    .email-modal-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 28px rgba(99,102,241,0.55); }
+    .email-modal-btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+    .email-modal-skip {
+      display: block;
+      margin-top: 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      background: none;
+      border: none;
+      font-family: inherit;
+    }
+    .email-modal-skip:hover { color: var(--text-secondary); }
+    .email-modal-success {
+      animation: successPop .4s cubic-bezier(.4,0,.2,1);
+    }
+    @keyframes successPop {
+      0% { transform: scale(.95); opacity: 0; }
+      60% { transform: scale(1.03); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .email-modal-error { color: #fca5a5; font-size: 12px; margin-top: 8px; min-height: 18px; }
   </style>
 </head>
 <body>
+
+<!-- ══ Email Onboarding Modal ══ -->
+<div class="email-modal-backdrop" id="emailModalBackdrop">
+  <div class="email-modal" id="emailModal">
+    <span class="email-modal-icon">🎯</span>
+    <h2>Get Job Alerts Instantly</h2>
+    <p>Enter your email and JENT will notify you every time a new matching internship or job is found — across 11 sources, ranked by AI.</p>
+    <input
+      class="email-modal-input"
+      id="emailModalInput"
+      type="email"
+      placeholder="your@email.com"
+      autocomplete="email"
+      onkeydown="if(event.key==='Enter') submitEmailModal()"
+    />
+    <div class="email-modal-error" id="emailModalError"></div>
+    <button class="email-modal-btn" id="emailModalBtn" onclick="submitEmailModal()">
+      🚀 Start Getting Alerts
+    </button>
+    <button class="email-modal-skip" onclick="dismissEmailModal()">Skip for now — I'll set up later</button>
+  </div>
+</div>
+
 <div class="app">
 
   <!-- ── Header ── -->
@@ -498,6 +662,7 @@
       </div>
     </div>
     <div class="header-right">
+      <span style="font-size:12px;font-weight:700;padding:4px 12px;border-radius:99px;background:linear-gradient(135deg,rgba(99,102,241,0.2),rgba(139,92,246,0.2));border:1px solid rgba(99,102,241,0.4);color:#a5b4fc">⚡ SaaS Engine Active</span>
       <div class="status-dot" title="Dashboard connected"></div>
       <span class="last-updated" id="lastUpdated">—</span>
       <button class="refresh-btn" onclick="loadAll()">⟳ Refresh</button>
@@ -619,10 +784,19 @@
   <div id="view-log" class="view">
     <div class="log-container">
       <div class="log-header">
-        <span class="panel-title" style="margin:0">📋 Agent Log (last 150 lines)</span>
-        <button class="refresh-btn" onclick="loadLog()">⟳ Refresh log</button>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="panel-title" style="margin:0">📋 Live Agent Log</span>
+          <span class="live-badge" id="liveBadge">
+            <span class="live-dot"></span> LIVE
+          </span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span id="logLineCount" style="font-size:12px;color:var(--text-muted)"></span>
+          <button class="refresh-btn" onclick="scrollLogToBottom()" title="Scroll to bottom">⬇ Bottom</button>
+          <button class="refresh-btn" id="logPauseBtn" onclick="toggleLogPause()">⏸ Pause</button>
+        </div>
       </div>
-      <div class="log-lines" id="logLines">Loading…</div>
+      <div class="log-lines" id="logLines">Connecting to live stream…</div>
     </div>
   </div>
 
@@ -963,28 +1137,78 @@ function updateScoreLabel() {
   document.getElementById('scoreLabel').textContent = val + '%';
 }
 
-// ── Log rendering ─────────────────────────────────────────────────────────────
-async function loadLog() {
+// ── Log rendering (LIVE SSE) ──────────────────────────────────────────────────
+let _logEventSource = null;
+let _logPaused = false;
+let _logLineTotal = 0;
+const MAX_LOG_LINES = 500;
+
+function _appendLogLine(line, isNew = false) {
+  if (_logPaused) return;
   const container = document.getElementById('logLines');
-  container.textContent = 'Loading…';
-  try {
-    const data = await fetchJSON('/api/log?n=150');
-    if (!data.lines.length) {
-      container.innerHTML = '<span style="color:var(--text-muted)">No log file yet. Run the agent first.</span>';
-      return;
-    }
-    container.innerHTML = data.lines.map(line => {
-      const cls = line.includes('[ERROR]') ? 'level-error' : line.includes('[WARNING]') ? 'level-warn' : 'level-info';
-      const tagged = line
-        .replace(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/, '<span class="log-ts">$1</span>')
-        .replace(/\[(INFO|WARNING|ERROR|CRITICAL)\]/, '<span class="log-level-tag">[$1]</span>');
-      return `<div class="log-line ${cls}">${tagged}</div>`;
-    }).join('');
-    container.scrollTop = container.scrollHeight;
-  } catch (e) {
-    container.innerHTML = '<span style="color:#fca5a5">Could not load log — is the server running?</span>';
+  if (!container) return;
+  const div = document.createElement('div');
+  const cls = line.includes('[ERROR]') || line.includes('[CRITICAL]') ? 'level-error'
+              : line.includes('[WARNING]') ? 'level-warn' : 'level-info';
+  div.className = `log-line ${cls}${isNew ? ' log-new' : ''}`;
+  const tagged = line
+    .replace(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/, '<span class="log-ts">$1</span>')
+    .replace(/\[(INFO|WARNING|ERROR|CRITICAL)\]/, '<span class="log-level-tag">[$1]</span>');
+  div.innerHTML = tagged;
+  container.appendChild(div);
+  _logLineTotal++;
+  while (container.children.length > MAX_LOG_LINES) {
+    container.removeChild(container.firstChild);
   }
+  const cntEl = document.getElementById('logLineCount');
+  if (cntEl) cntEl.textContent = `${_logLineTotal} lines`;
+  const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+  if (distFromBottom < 80) container.scrollTop = container.scrollHeight;
 }
+
+function startLiveLog() {
+  if (_logEventSource) { _logEventSource.close(); _logEventSource = null; }
+  const container = document.getElementById('logLines');
+  if (!container) return;
+  container.innerHTML = '';
+  _logLineTotal = 0;
+  const badge = document.getElementById('liveBadge');
+
+  _logEventSource = new EventSource('/api/log/stream');
+
+  _logEventSource.onopen = () => {
+    if (badge) { badge.style.color = '#22c55e'; badge.style.borderColor = 'rgba(34,197,94,0.3)'; }
+  };
+  _logEventSource.onmessage = (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      _appendLogLine(payload.line, !payload.initial);
+    } catch(_) {}
+  };
+  _logEventSource.onerror = () => {
+    if (badge) { badge.style.color = '#f59e0b'; badge.style.borderColor = 'rgba(245,158,11,0.3)'; }
+    setTimeout(() => {
+      if (_logEventSource) { _logEventSource.close(); _logEventSource = null; }
+      startLiveLog();
+    }, 3000);
+  };
+}
+
+function scrollLogToBottom() {
+  const c = document.getElementById('logLines');
+  if (c) c.scrollTop = c.scrollHeight;
+}
+
+function toggleLogPause() {
+  _logPaused = !_logPaused;
+  const btn = document.getElementById('logPauseBtn');
+  if (btn) btn.textContent = _logPaused ? '▶ Resume' : '⏸ Pause';
+  if (!_logPaused) scrollLogToBottom();
+}
+
+// legacy stub — old references still work
+function loadLog() { startLiveLog(); }
+
 
 // ── Resume upload ──────────────────────────────────────────────────────────
 async function loadResumeStatus() {
@@ -1054,6 +1278,33 @@ function handleDrop(e) {
 }
 
 // ── Applied jobs ────────────────────────────────────────────────────────────
+const PROGRESS_LABELS = {
+  starting: 'Starting…',
+  checking_login: 'Checking login',
+  navigating: 'Opening job page',
+  finding_apply_button: 'Finding apply button',
+  filling_form: 'Filling form',
+  submitting: 'Submitting',
+  done: 'Done',
+  skipped: 'Skipped',
+  error: 'Error',
+};
+
+function progressBadge(j) {
+  if (j.status === 'in_progress') {
+    const stage = PROGRESS_LABELS[j.progress_stage] || j.progress_stage || 'In progress';
+    return `<span style="padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;
+      background:rgba(99,102,241,0.15);color:#818cf8">${esc(stage)}</span>`;
+  }
+  const statusColor = { submitted: '#22c55e', skipped: '#f59e0b', failed: '#f43f5e', in_progress: '#818cf8' };
+  const color = statusColor[j.status] || '#6366f1';
+  const label = (j.status || 'unknown').toUpperCase();
+  const note = j.note || j.error;
+  const title = note ? ` title="${esc(note)}"` : '';
+  return `<span style="padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;
+    background:${color}22;color:${color}"${title}>${label}</span>`;
+}
+
 async function loadApplied() {
   const el = document.getElementById('appliedContent');
   if (!el) return;
@@ -1065,34 +1316,43 @@ async function loadApplied() {
       </div>`;
       return;
     }
-    const statusColor = { submitted: '#22c55e', skipped: '#f59e0b', failed: '#f43f5e' };
-    el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+    const summary = data.in_progress
+      ? `<div style="margin-bottom:12px;font-size:13px;color:#818cf8">
+          ⏳ ${data.in_progress} application(s) in progress…
+        </div>`
+      : '';
+    el.innerHTML = summary + `<table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="color:var(--text-muted);text-align:left">
         <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Job</th>
         <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Company</th>
         <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Platform</th>
         <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Score</th>
         <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Applied</th>
-        <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Status</th>
+        <th style="padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.06)">Progress</th>
       </tr></thead>
       <tbody>
         ${data.jobs.map(j => `
           <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
             <td style="padding:10px 12px"><a href="${esc(j.url)}" target="_blank" style="color:var(--text-primary);text-decoration:none">${esc(j.title)}</a></td>
             <td style="padding:10px 12px;color:var(--text-secondary)">${esc(j.company)}</td>
-            <td style="padding:10px 12px;color:var(--text-muted)">${esc(j.source)}</td>
+            <td style="padding:10px 12px;color:var(--text-muted)">${esc(j.platform || j.source)}</td>
             <td style="padding:10px 12px">${((j.score||0)*100).toFixed(0)}%</td>
             <td style="padding:10px 12px;color:var(--text-muted)">${fmtAgo(j.applied_at)}</td>
-            <td style="padding:10px 12px">
-              <span style="padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;
-                background:${statusColor[j.status]||'#6366f1'}22;
-                color:${statusColor[j.status]||'#6366f1'}">
-                ${(j.status||'unknown').toUpperCase()}
-              </span>
-            </td>
+            <td style="padding:10px 12px">${progressBadge(j)}</td>
           </tr>`).join('')}
       </tbody>
     </table>`;
+    // Poll faster while applications are running
+    if (data.in_progress > 0 && !window._appliedPoll) {
+      window._appliedPoll = setInterval(() => {
+        const active = document.getElementById('view-applied');
+        if (active && active.classList.contains('active')) loadApplied();
+        else { clearInterval(window._appliedPoll); window._appliedPoll = null; }
+      }, 4000);
+    } else if (data.in_progress === 0 && window._appliedPoll) {
+      clearInterval(window._appliedPoll);
+      window._appliedPoll = null;
+    }
   } catch(e) {
     el.innerHTML = `<span style="color:#fca5a5">Failed to load applied jobs.</span>`;
   }
@@ -1123,11 +1383,88 @@ function showToast(msg, isError = false) {
   setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
+// ── Init ─────────────────────────────────────────────────────────────────────────────
 loadAll();
 checkSubscriptionStatus();
+startLiveLog(); // start SSE log stream immediately
 // Auto-refresh every 60 seconds
 setInterval(loadAll, 60000);
+
+// Show email modal on first visit if no email saved in localStorage
+(async function checkEmailModal() {
+  const dismissed = localStorage.getItem('jent_email_dismissed');
+  const savedEmail = localStorage.getItem('jent_email');
+  if (dismissed || savedEmail) {
+    document.getElementById('emailModalBackdrop').classList.add('hidden');
+    return;
+  }
+  // Also check server-side subscription
+  try {
+    const sub = await fetchJSON('/api/subscription-status');
+    if (sub.active && sub.email) {
+      localStorage.setItem('jent_email', sub.email);
+      document.getElementById('emailModalBackdrop').classList.add('hidden');
+      return;
+    }
+  } catch(_) {}
+  // Show modal after short delay for smooth entrance
+  setTimeout(() => {
+    document.getElementById('emailModalInput').focus();
+  }, 400);
+})();
+
+// ── Email Modal ───────────────────────────────────────────────────────────────────────
+async function submitEmailModal() {
+  const input = document.getElementById('emailModalInput');
+  const btn   = document.getElementById('emailModalBtn');
+  const errEl = document.getElementById('emailModalError');
+  const email = (input.value || '').trim();
+  errEl.textContent = '';
+  if (!email || !email.includes('@')) {
+    errEl.textContent = 'Please enter a valid email address.';
+    input.focus();
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = '⏳ Saving…';
+  try {
+    const resp = await fetch('/api/subscribe-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await resp.json();
+    if (data.success) {
+      localStorage.setItem('jent_email', email);
+      // Show success state
+      const modal = document.getElementById('emailModal');
+      modal.innerHTML = `
+        <span class="email-modal-icon">✅</span>
+        <h2>You're all set!</h2>
+        <p style="margin-bottom:0">Job alerts will be sent to <strong style="color:#a5b4fc">${email}</strong> whenever new matches are found.</p>
+      `;
+      modal.classList.add('email-modal-success');
+      setTimeout(() => dismissEmailModal(), 2200);
+      showToast('🎉 Email registered! Notifications active.');
+      checkSubscriptionStatus();
+    } else {
+      errEl.textContent = data.error || 'Failed to save email. Try again.';
+      btn.disabled = false;
+      btn.textContent = '🚀 Start Getting Alerts';
+    }
+  } catch(e) {
+    errEl.textContent = 'Network error. Is the dashboard running?';
+    btn.disabled = false;
+    btn.textContent = '🚀 Start Getting Alerts';
+  }
+}
+
+function dismissEmailModal() {
+  localStorage.setItem('jent_email_dismissed', '1');
+  const backdrop = document.getElementById('emailModalBackdrop');
+  backdrop.style.animation = 'fadeInBackdrop .25s ease reverse';
+  setTimeout(() => backdrop.classList.add('hidden'), 250);
+}
 
 // ── Subscription ──────────────────────────────────────────────────────────────
 let _subData = null;

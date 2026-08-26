@@ -851,12 +851,12 @@ def passes_location_filter(job: dict) -> bool:
 # -----------------------------------------------------------------------
 # DEDUPE STATE (augmented: stores score + timestamp)
 # -----------------------------------------------------------------------
-def load_seen() -> dict:
-    return db.load_seen()
+def load_seen(user_id: str = None) -> dict:
+    return db.load_seen(user_id=user_id)
 
 
-def save_seen(seen: dict):
-    db.save_seen(seen)
+def save_seen(seen: dict, user_id: str = None):
+    db.save_seen(seen, user_id=user_id)
 
 
 # -----------------------------------------------------------------------
@@ -953,8 +953,9 @@ def send_to_zapier(job: dict) -> bool:
         return False
 
 
-def send_via_gmail(job: dict) -> bool:
-    if not GMAIL_ADDRESS or not GMAIL_APP_PASSWORD or not GMAIL_TO_ADDRESS:
+def send_via_gmail(job: dict, to_address: str = None) -> bool:
+    to = (to_address or GMAIL_TO_ADDRESS or "").strip()
+    if not GMAIL_ADDRESS or not GMAIL_APP_PASSWORD or not to:
         return False
 
     subject = f"Job Match ({job.get('score', 0):.0%}): {job.get('title', '')} @ {job.get('company', '')}"
@@ -962,7 +963,7 @@ def send_via_gmail(job: dict) -> bool:
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = GMAIL_ADDRESS
-    msg["To"] = GMAIL_TO_ADDRESS
+    msg["To"] = to
 
     # Plain-text fallback
     plain = (
@@ -981,8 +982,8 @@ def send_via_gmail(job: dict) -> bool:
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as server:
             server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
-            server.sendmail(GMAIL_ADDRESS, [GMAIL_TO_ADDRESS], msg.as_string())
-        log.info(f"[OK] Gmail: {job['score']:.2f}  {job['title']} @ {job.get('company', '')}")
+            server.sendmail(GMAIL_ADDRESS, [to], msg.as_string())
+        log.info(f"[OK] Gmail → {to}: {job['score']:.2f}  {job['title']} @ {job.get('company', '')}")
         return True
     except Exception as e:
         log.warning(f"Gmail send failed: {e}")
@@ -1043,12 +1044,14 @@ def send_via_discord(job: dict) -> bool:
         return False
 
 
-def notify(job: dict):
+def notify(job: dict, to_email: str = None):
     """
     Delivery priority:
       FORCE_DIRECT_GMAIL → Gmail only
       Otherwise: Zapier → Gmail → Telegram → Discord → dry-run print
     Telegram and Discord always fire alongside the primary channel (additive).
+
+    If to_email is provided, Gmail sends to that address (per-subscriber delivery).
     """
     if _DRY_RUN:
         log.info(f"[DRY RUN] {job['score']:.2f}  {job['title']} @ {job.get('company', '')}")
@@ -1056,9 +1059,9 @@ def notify(job: dict):
 
     sent = False
     if FORCE_DIRECT_GMAIL:
-        sent = send_via_gmail(job)
+        sent = send_via_gmail(job, to_address=to_email)
     else:
-        sent = send_to_zapier(job) or send_via_gmail(job)
+        sent = send_to_zapier(job) or send_via_gmail(job, to_address=to_email)
 
     # Always also fire supplemental channels
     send_via_telegram(job)
@@ -1072,86 +1075,78 @@ def notify(job: dict):
 
 
 # -----------------------------------------------------------------------
-# ONE CYCLE
+# ONE CYCLE (MULTI-TENANT SAAS AWARE)
 # -----------------------------------------------------------------------
 def run_once():
     cycle_start = datetime.now(timezone.utc)
     log.info("-" * 60)
     log.info(f"Cycle start: {cycle_start.isoformat()}" + (" [DRY RUN]" if _DRY_RUN else ""))
 
-    resume_text = get_resume_text()
-    seen = load_seen()
+    global_resume_text = get_resume_text()
 
     log.info("Fetching all sources...")
     all_jobs, source_counts = fetch_all_sources()
-    log.info(f"Fetched {len(all_jobs)} total listings.")
+    log.info(f"Fetched {len(all_jobs)} total listings across {len(source_counts)} sources.")
     db.save_raw_jobs(all_jobs)
 
-    unseen = [j for j in all_jobs if j["id"] not in seen]
-    level_ok = [j for j in unseen if passes_level_filter(j)]
-    loc_ok = [j for j in level_ok if passes_location_filter(j)]
-    ranked = rank_by_similarity(resume_text, loc_ok)
+    # Multi-tenant user loop
+    subscribers = db.get_all_subscribers()
+    log.info(f"[SaaS] Processing cycle for {len(subscribers)} active user(s)...")
 
-    log.info(
-        f"{len(unseen)} unseen -> {len(level_ok)} pass level filter -> "
-        f"{len(loc_ok)} pass location filter -> {len(ranked)} above similarity bar"
-    )
+    total_matches = 0
 
-    # ── Subscription gate ─────────────────────────────────────────────────────
-    # Only send notifications if an active ₹75/month subscription exists.
-    if not check_subscription():
-        log.info("Notifications skipped — no active subscription.\n")
-        # Still persist seen_jobs so we don't re-process the same listings next cycle
+    for sub in subscribers:
+        uid = sub.get("user_id", "default_user")
+        u_email = sub.get("email", "")
+        log.info(f"[SaaS] Evaluating jobs for user: {u_email} ({uid})")
+
+        user_seen = load_seen(user_id=uid)
+        unseen = [j for j in all_jobs if j["id"] not in user_seen]
+        level_ok = [j for j in unseen if passes_level_filter(j)]
+        loc_ok = [j for j in level_ok if passes_location_filter(j)]
+
+        user_resume = sub.get("resume_text") or global_resume_text
+        ranked = rank_by_similarity(user_resume, loc_ok)
+
+        log.info(
+            f"  [{u_email}] {len(unseen)} unseen -> {len(level_ok)} pass level -> "
+            f"{len(loc_ok)} pass location -> {len(ranked)} matched"
+        )
+        total_matches += len(ranked)
+
+        for job in ranked:
+            notify(job, to_email=u_email or None)
+
+            if AUTO_APPLY_ENABLED and job.get("score", 0) >= AUTO_APPLY_THRESHOLD:
+                try:
+                    from scrapers.auto_apply import auto_apply
+                    auto_apply(
+                        job=job,
+                        resume_text=user_resume,
+                        cover_letter_template=COVER_LETTER_TEMPLATE,
+                        enabled_platforms=AUTO_APPLY_PLATFORMS,
+                        dry_run=_DRY_RUN,
+                        user_id=uid,
+                    )
+                except Exception as e:
+                    log.warning(f"[AutoApply] Error: {e}")
+
+            time.sleep(1)
+
+        now_iso = datetime.now(timezone.utc).isoformat()
         if not _DRY_RUN:
-            now_skip = datetime.now(timezone.utc).isoformat()
             for job in all_jobs:
-                if job["id"] not in seen:
-                    seen[job["id"]] = {
+                if job["id"] not in user_seen:
+                    user_seen[job["id"]] = {
                         "score": job.get("score", 0),
-                        "found_at": now_skip,
+                        "found_at": now_iso,
                         "title": job.get("title", ""),
                         "company": job.get("company", ""),
                         "url": job.get("url", ""),
                         "source": job.get("source", ""),
                         "location": job.get("location", ""),
                     }
-            save_seen(seen)
-        log.info(f"Cycle complete at {datetime.now().isoformat()}.\n")
-        return 0
-
-    for job in ranked:
-        notify(job)
-        # Auto-apply if enabled, platform supported, and score above threshold
-        if AUTO_APPLY_ENABLED and job.get("score", 0) >= AUTO_APPLY_THRESHOLD:
-            try:
-                from scrapers.auto_apply import auto_apply
-                auto_apply(
-                    job=job,
-                    resume_text=resume_text,
-                    cover_letter_template=COVER_LETTER_TEMPLATE,
-                    enabled_platforms=AUTO_APPLY_PLATFORMS,
-                    dry_run=_DRY_RUN,
-                )
-            except Exception as e:
-                log.warning(f"[AutoApply] Error: {e}")
-        time.sleep(1)
-
-    now_iso = datetime.now(timezone.utc).isoformat()
-
-    if not _DRY_RUN:
-        # Update seen_jobs with augmented info
-        for job in all_jobs:
-            if job["id"] not in seen:
-                seen[job["id"]] = {
-                    "score": job.get("score", 0),
-                    "found_at": now_iso,
-                    "title": job.get("title", ""),
-                    "company": job.get("company", ""),
-                    "url": job.get("url", ""),
-                    "source": job.get("source", ""),
-                    "location": job.get("location", ""),
-                }
-        save_seen(seen)
+            save_seen(user_seen, user_id=uid)
 
         # Save cycle stats
         stats = load_cycle_stats()
@@ -1167,7 +1162,7 @@ def run_once():
         save_cycle_stats(stats)
 
     log.info(f"Cycle complete at {datetime.now().isoformat()}.\n")
-    return len(ranked)
+    return total_matches
 
 
 # -----------------------------------------------------------------------

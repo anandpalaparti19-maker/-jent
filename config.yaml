@@ -106,7 +106,7 @@ unstop_include_hackathons: true
 # Automatically apply to matched jobs on Internshala, Indeed, and Unstop.
 # Only fires for jobs with score >= auto_apply_threshold AND on a supported platform.
 # Upload your resume via the dashboard first, then enable this.
-auto_apply_enabled: false
+auto_apply_enabled: true
 auto_apply_threshold: 0.25
 auto_apply_platforms:
   - internshala
@@ -131,5 +131,5 @@ cashfree_app_id: "YOUR_CASHFREE_APP_ID"
 cashfree_secret_key: "YOUR_CASHFREE_SECRET_KEY"
 cashfree_env: "test"          # "test" (sandbox) or "prod" (live)
 subscription_amount: 75       # ₹ per month
-subscription_required: true   # set to false to bypass subscription check (dev mode)
+subscription_required: false   # set to false to bypass subscription check (dev mode)
 

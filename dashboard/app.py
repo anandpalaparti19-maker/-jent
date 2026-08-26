@@ -16,9 +16,10 @@ import hmac
 import hashlib
 import uuid
 import calendar
+import time
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-from flask import Flask, jsonify, send_from_directory, request, redirect
+from flask import Flask, jsonify, send_from_directory, request, redirect, Response, stream_with_context
 
 BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__))).parent
 SEEN_JOBS_FILE = BASE_DIR / "seen_jobs.json"
@@ -74,10 +75,63 @@ sys.path.insert(0, str(BASE_DIR))
 import db
 
 
+# ── Backfill existing subscribers into users.json on startup ─────────────────
+
+def _backfill_subscribers():
+    """Sync any active subscriptions.json subscribers into users.json.
+
+    This ensures subscribers who paid before the sync logic existed (or who
+    subscribed before registering an account) are picked up by the agent
+    immediately on the next cycle.
+    """
+    import hashlib as _hl
+    if not SUBSCRIPTIONS_FILE.exists():
+        return
+    try:
+        with open(SUBSCRIPTIONS_FILE, "r", encoding="utf-8") as f:
+            subs = json.load(f)
+    except Exception:
+        return
+
+    now = datetime.now(timezone.utc)
+    users = db.load_users()
+
+    for sub in subs.get("subscribers", []):
+        if sub.get("status") != "active":
+            continue
+        email = (sub.get("email") or "").strip().lower()
+        if not email:
+            continue
+        # Skip if already in users.json with active status
+        existing = users.get(email, {})
+        if existing.get("subscription_status") == "active":
+            continue
+        user_id = existing.get("user_id") or f"usr_{_hl.md5(email.encode()).hexdigest()[:12]}"
+        plan = sub.get("plan", "monthly")
+        user_doc = {
+            **existing,
+            "user_id": user_id,
+            "email": email,
+            "name": sub.get("name") or existing.get("name") or email.split("@")[0],
+            "subscription_status": "active",
+            "plan": plan,
+            "subscribed_at": sub.get("subscribed_at", now.isoformat()),
+        }
+        if sub.get("order_id"):
+            user_doc["order_id"] = sub["order_id"]
+        if sub.get("payment_id"):
+            user_doc["payment_id"] = sub["payment_id"]
+        if "created_at" not in user_doc:
+            user_doc["created_at"] = now.isoformat()
+        db.save_user(user_doc)
+
+_backfill_subscribers()
+
+
 # -- Helpers ------------------------------------------------------------------
 
-def load_seen() -> dict:
-    return db.load_seen()
+def load_seen(user_id: str = None) -> dict:
+    return db.load_seen(user_id=user_id)
 
 
 def load_cycle_stats() -> list:
@@ -157,11 +211,60 @@ def _cf_headers() -> dict:
 
 
 
+# -- Authentication API Routes ------------------------------------------------
+
+@app.route("/api/auth/register", methods=["POST"])
+def api_auth_register():
+    body = request.get_json(force=True) or {}
+    email    = (body.get("email") or "").strip().lower()
+    password = (body.get("password") or "").strip()
+    name     = (body.get("name") or "").strip()
+    
+    if not email or "@" not in email:
+        return jsonify({"error": "Valid email address required"}), 400
+    if not password or len(password) < 4:
+        return jsonify({"error": "Password must be at least 4 characters"}), 400
+
+    user = db.create_user(email, password, name)
+    if not user:
+        return jsonify({"error": "Email is already registered. Please login instead."}), 400
+
+    res = jsonify({"success": True, "user": {"user_id": user["user_id"], "email": user["email"], "name": user["name"]}})
+    res.set_cookie("jent_user_id", user["user_id"], max_age=86400*30)
+    return res
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    body = request.get_json(force=True) or {}
+    email    = (body.get("email") or "").strip().lower()
+    password = (body.get("password") or "").strip()
+
+    user = db.authenticate_user(email, password)
+    if not user:
+        return jsonify({"error": "Invalid email or password"}), 401
+
+    res = jsonify({"success": True, "user": {"user_id": user["user_id"], "email": user["email"], "name": user["name"]}})
+    res.set_cookie("jent_user_id", user["user_id"], max_age=86400*30)
+    return res
+
+
+@app.route("/api/auth/me")
+def api_auth_me():
+    uid = request.cookies.get("jent_user_id") or request.args.get("user_id") or db.DEFAULT_USER_ID
+    profile = db.get_user_profile(uid)
+    return jsonify({"user_id": uid, "profile": profile})
+
+
 # -- API Routes ---------------------------------------------------------------
+
+def _get_current_user_id():
+    return request.cookies.get("jent_user_id") or request.args.get("user_id") or db.DEFAULT_USER_ID
 
 @app.route("/api/jobs")
 def api_jobs():
-    seen = load_seen()
+    uid = _get_current_user_id()
+    seen = load_seen(user_id=uid)
     jobs = []
     for jid, info in seen.items():
         if not isinstance(info, dict) or not info.get("title"):
@@ -190,7 +293,8 @@ def api_jobs():
 
 @app.route("/api/stats")
 def api_stats():
-    seen = load_seen()
+    uid = _get_current_user_id()
+    seen = load_seen(user_id=uid)
     cycles = load_cycle_stats()
 
     total_seen = len(seen)
@@ -205,13 +309,7 @@ def api_stats():
         src = info["source"]
         source_counts[src] = source_counts.get(src, 0) + 1
 
-    applied_count = 0
-    if APPLIED_JOBS_FILE.exists():
-        try:
-            with open(APPLIED_JOBS_FILE, "r", encoding="utf-8") as f:
-                applied_count = len(json.load(f))
-        except Exception:
-            pass
+    applied_count = len(db.load_applied(user_id=uid))
 
     return jsonify({
         "total_seen": total_seen,
@@ -227,6 +325,93 @@ def api_stats():
 def api_log():
     n = int(request.args.get("n", 150))
     return jsonify({"lines": tail_log(n)})
+
+
+@app.route("/api/log/stream")
+def api_log_stream():
+    """Server-Sent Events stream for live log tailing."""
+    def generate():
+        last_size = 0
+        last_line_count = 0
+        # Send initial backlog (last 80 lines)
+        initial = tail_log(80)
+        for line in initial:
+            yield f"data: {json.dumps({'line': line, 'initial': True})}\n\n"
+        last_line_count = sum(1 for _ in open(LOG_FILE, 'r', encoding='utf-8', errors='replace')) if LOG_FILE.exists() else 0
+        # Stream new lines as they appear
+        while True:
+            time.sleep(1.5)
+            if not LOG_FILE.exists():
+                continue
+            try:
+                with open(LOG_FILE, 'r', encoding='utf-8', errors='replace') as f:
+                    lines = f.readlines()
+                current_count = len(lines)
+                if current_count > last_line_count:
+                    new_lines = lines[last_line_count:]
+                    for line in new_lines:
+                        yield f"data: {json.dumps({'line': line.rstrip(), 'initial': False})}\n\n"
+                    last_line_count = current_count
+            except Exception:
+                pass
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive',
+        }
+    )
+
+
+@app.route("/api/subscribe-email", methods=["POST"])
+def api_subscribe_email():
+    """Save a free email subscription for notifications (no payment required)."""
+    body = request.get_json(force=True) or {}
+    email = (body.get("email") or "").strip().lower()
+    name  = (body.get("name") or "").strip()
+    if not email or "@" not in email:
+        return jsonify({"error": "Valid email is required"}), 400
+    subs = load_subscriptions()
+    # Check if already registered
+    for sub in subs.get("subscribers", []):
+        if sub.get("email", "").lower() == email and sub.get("status") == "active":
+            return jsonify({"success": True, "message": "Already registered", "email": email})
+    # Mark old active subs as superseded
+    for sub in subs.get("subscribers", []):
+        if sub.get("status") == "active" and sub.get("plan") == "notify":
+            sub["status"] = "superseded"
+    subs.setdefault("subscribers", []).append({
+        "email": email,
+        "name": name,
+        "subscribed_at": datetime.now(timezone.utc).isoformat(),
+        "status": "active",
+        "plan": "notify",
+        "order_id": None,
+        "payment_id": None,
+        "amount": 0,
+    })
+    save_subscriptions(subs)
+
+    # ── Sync into users.json so the agent emails this subscriber ──────────────
+    import hashlib as _hl
+    users = db.load_users()
+    existing = users.get(email, {})
+    user_id = existing.get("user_id") or f"usr_{_hl.md5(email.encode()).hexdigest()[:12]}"
+    user_doc = {
+        **existing,
+        "user_id": user_id,
+        "email": email,
+        "name": name or existing.get("name") or email.split("@")[0],
+        "subscription_status": "active",
+        "plan": "notify",
+    }
+    if "created_at" not in user_doc:
+        user_doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    db.save_user(user_doc)
+
+    return jsonify({"success": True, "message": f"Email {email} registered for notifications", "email": email})
 
 
 @app.route("/api/health")
@@ -420,7 +605,7 @@ def api_payment_webhook():
 
 
 def _activate_subscription(email, name, order_id, payment_id, amount):
-    """Write subscriber record to subscriptions.json."""
+    """Write subscriber record to subscriptions.json and sync into users.json."""
     subs = load_subscriptions()
     # Mark any previous records as expired
     for s in subs["subscribers"]:
@@ -437,6 +622,26 @@ def _activate_subscription(email, name, order_id, payment_id, amount):
         "plan": "monthly",
     })
     save_subscriptions(subs)
+
+    # ── Sync into users.json so the agent emails this subscriber ──────────────
+    import hashlib as _hl
+    users = db.load_users()
+    existing = users.get(email.strip().lower(), {})
+    user_id = existing.get("user_id") or f"usr_{_hl.md5(email.encode()).hexdigest()[:12]}"
+    user_doc = {
+        **existing,                          # keep password hash / profile if already registered
+        "user_id": user_id,
+        "email": email.strip().lower(),
+        "name": name or existing.get("name") or email.split("@")[0],
+        "subscription_status": "active",
+        "plan": "monthly",
+        "subscribed_at": datetime.now(timezone.utc).isoformat(),
+        "order_id": order_id,
+        "payment_id": payment_id,
+    }
+    if "created_at" not in user_doc:
+        user_doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    db.save_user(user_doc)
 
 
 
@@ -482,10 +687,18 @@ def api_upload_resume():
 @app.route("/api/applied-jobs")
 def api_applied_jobs():
     try:
-        data = db.load_applied()
+        uid = _get_current_user_id()
+        data = db.load_applied(user_id=uid)
         jobs = [{"id": jid, **info} for jid, info in data.items()]
         jobs.sort(key=lambda j: j.get("applied_at", ""), reverse=True)
-        return jsonify({"jobs": jobs, "total": len(jobs)})
+        in_progress = sum(1 for j in jobs if j.get("status") == "in_progress")
+        submitted = sum(1 for j in jobs if j.get("status") == "submitted")
+        return jsonify({
+            "jobs": jobs,
+            "total": len(jobs),
+            "in_progress": in_progress,
+            "submitted": submitted,
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

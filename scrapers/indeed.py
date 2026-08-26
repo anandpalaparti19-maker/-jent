@@ -179,7 +179,7 @@ async def _fetch(query: str, location: str, headless: bool) -> List[dict]:
             log.info("[Indeed] Not logged in — launching headed browser for login...")
             ok = await wait_for_manual_login(
                 page, LOGIN_URL, "Sign Out",
-                "Indeed", timeout_seconds=120
+                "Indeed", timeout_seconds=300
             )
             if not ok:
                 return []

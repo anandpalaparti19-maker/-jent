@@ -116,7 +116,7 @@ def save_seen(seen_dict: dict, user_id: str = None):
                         'found_at': '',
                         'updated_at': datetime.now(timezone.utc).isoformat(),
                     }
-                ops.append(pymongo.UpdateOne({'user_id': uid, 'job_id': jid}, {'': doc}, upsert=True))
+                ops.append(pymongo.UpdateOne({'user_id': uid, 'job_id': jid}, {'$set': doc}, upsert=True))
             if ops:
                 _db.seen_jobs.bulk_write(ops)
         except Exception as e:
@@ -144,6 +144,11 @@ def load_applied(user_id: str = None) -> dict:
                         'applied_at': doc.get('applied_at', ''),
                         'status': doc.get('status', 'submitted'),
                         'note': doc.get('note', ''),
+                        'progress_stage': doc.get('progress_stage', ''),
+                        'platform': doc.get('platform', ''),
+                        'started_at': doc.get('started_at', ''),
+                        'completed_at': doc.get('completed_at', ''),
+                        'error': doc.get('error', ''),
                     }
             return applied
         except Exception as e:
@@ -174,8 +179,13 @@ def save_applied(data: dict, user_id: str = None):
                     'applied_at': info.get('applied_at', datetime.now(timezone.utc).isoformat()),
                     'status': info.get('status', 'submitted'),
                     'note': info.get('note', ''),
+                    'progress_stage': info.get('progress_stage', ''),
+                    'platform': info.get('platform', ''),
+                    'started_at': info.get('started_at', ''),
+                    'completed_at': info.get('completed_at', ''),
+                    'error': info.get('error', ''),
                 }
-                ops.append(pymongo.UpdateOne({'user_id': uid, 'job_id': jid}, {'': doc}, upsert=True))
+                ops.append(pymongo.UpdateOne({'user_id': uid, 'job_id': jid}, {'$set': doc}, upsert=True))
             if ops:
                 _db.applied_jobs.bulk_write(ops)
         except Exception as e:
@@ -186,20 +196,61 @@ def save_applied(data: dict, user_id: str = None):
     except Exception as e:
         log.warning(f'[DB] Save applied_jobs.json error: {e}')
 
-def record_application(job: dict, status: str = 'submitted', note: str = '', user_id: str = None):
+def update_application_progress(job: dict, stage: str, user_id: str = None, platform: str = ''):
+    """Update in-progress application stage for dashboard live tracking."""
     applied = load_applied(user_id)
     jid = job['id']
+    now = datetime.now(timezone.utc).isoformat()
+    if jid not in applied:
+        applied[jid] = {
+            'title': job.get('title', ''),
+            'company': job.get('company', ''),
+            'url': job.get('url', ''),
+            'source': job.get('source', ''),
+            'score': round(job.get('score', 0), 4),
+            'applied_at': now,
+            'status': 'in_progress',
+            'note': '',
+            'progress_stage': stage,
+            'platform': platform,
+            'started_at': now,
+            'completed_at': '',
+            'error': '',
+        }
+    else:
+        applied[jid]['progress_stage'] = stage
+        applied[jid]['status'] = 'in_progress'
+        if platform:
+            applied[jid]['platform'] = platform
+    save_applied(applied, user_id)
+
+
+def record_application(job: dict, status: str = 'submitted', note: str = '',
+                       user_id: str = None, platform: str = ''):
+    applied = load_applied(user_id)
+    jid = job['id']
+    now = datetime.now(timezone.utc).isoformat()
+    existing = applied.get(jid, {})
     applied[jid] = {
         'title': job.get('title', ''),
         'company': job.get('company', ''),
         'url': job.get('url', ''),
         'source': job.get('source', ''),
         'score': round(job.get('score', 0), 4),
-        'applied_at': datetime.now(timezone.utc).isoformat(),
+        'applied_at': existing.get('applied_at', now),
         'status': status,
         'note': note,
+        'progress_stage': 'done' if status == 'submitted' else stage_label(status),
+        'platform': platform or existing.get('platform', ''),
+        'started_at': existing.get('started_at', now),
+        'completed_at': now,
+        'error': note if status == 'failed' else '',
     }
     save_applied(applied, user_id)
+
+
+def stage_label(status: str) -> str:
+    return {'skipped': 'skipped', 'failed': 'error'}.get(status, status)
 
 def load_cycle_stats() -> list:
     if is_mongodb_connected():
@@ -278,6 +329,102 @@ def save_user_profile(profile_data: dict, user_id: str = None):
         try:
             profile_data['user_id'] = uid
             profile_data['updated_at'] = datetime.now(timezone.utc).isoformat()
-            _db.user_profiles.update_one({'user_id': uid}, {'': profile_data}, upsert=True)
+            _db.user_profiles.update_one({'user_id': uid}, {'$set': profile_data}, upsert=True)
         except Exception as e:
             log.warning(f'[DB] MongoDB save_user_profile error: {e}')
+
+# ── Multi-Tenant SaaS User Authentication & Subscriber Helpers ───────────────
+
+import hashlib, secrets
+
+USERS_FILE = BASE_DIR / 'users.json'
+
+def _hash_password(password: str, salt: str = None) -> tuple:
+    if not salt:
+        salt = secrets.token_hex(16)
+    hashed = hashlib.sha256((password + salt).encode('utf-8')).hexdigest()
+    return hashed, salt
+
+def load_users() -> dict:
+    if is_mongodb_connected():
+        try:
+            users = {}
+            for doc in _db.users.find({}, {'_id': 0}):
+                users[doc['email']] = doc
+            return users
+        except Exception as e:
+            log.warning(f'[DB] MongoDB load_users failed: {e}')
+    if USERS_FILE.exists():
+        try:
+            with open(USERS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_user(user_doc: dict):
+    email = user_doc.get('email')
+    if not email:
+        return
+    if is_mongodb_connected():
+        try:
+            _db.users.update_one({'email': email}, {'$set': user_doc}, upsert=True)
+        except Exception as e:
+            log.warning(f'[DB] MongoDB save_user error: {e}')
+    users = load_users()
+    users[email] = user_doc
+    try:
+        with open(USERS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(users, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        log.warning(f'[DB] Save users.json error: {e}')
+
+def create_user(email: str, password: str, name: str = '') -> dict | None:
+    email = email.strip().lower()
+    users = load_users()
+    if email in users:
+        return None  # Email already registered
+    hashed_pwd, salt = _hash_password(password)
+    user_id = f"usr_{hashlib.md5(email.encode()).hexdigest()[:12]}"
+    user_doc = {
+        'user_id': user_id,
+        'email': email,
+        'name': name or email.split('@')[0],
+        'password_hash': hashed_pwd,
+        'salt': salt,
+        'created_at': datetime.now(timezone.utc).isoformat(),
+        'subscription_status': 'active',  # Free tier / active trial default
+        'plan': 'trial',
+    }
+    save_user(user_doc)
+    return user_doc
+
+def authenticate_user(email: str, password: str) -> dict | None:
+    email = email.strip().lower()
+    users = load_users()
+    user = users.get(email)
+    if not user:
+        return None
+    hashed, _ = _hash_password(password, user.get('salt', ''))
+    if hashed == user.get('password_hash'):
+        return user
+    return None
+
+def get_all_subscribers() -> list:
+    """Return all users with active subscriptions or active trial profiles."""
+    users = load_users()
+    active_users = []
+    for email, u in users.items():
+        if u.get('subscription_status') in ('active', 'trial', 'dev'):
+            active_users.append(u)
+    if not active_users:
+        # Fallback to default user if no users registered yet
+        return [{
+            'user_id': DEFAULT_USER_ID,
+            'email': 'default@jent.ai',
+            'name': 'Default User',
+            'subscription_status': 'active',
+            'plan': 'default'
+        }]
+    return active_users
+
