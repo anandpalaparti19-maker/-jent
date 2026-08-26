@@ -53,6 +53,12 @@ check_interval_hours: 2
 # directory containing this config file.
 resume_path: resume.pdf
 
+# ── Delivery: SendGrid (recommended for multi-user hosting — no daily cap) ────
+# Sign up free at https://sendgrid.com → Settings → API Keys → Create API Key
+# Free tier: 100 emails/day. Paid: unlimited.
+# If set, SendGrid is tried first; Gmail is the automatic fallback.
+sendgrid_api_key: ""          # e.g. "SG.xxxxxxxxxxxxxxxxxxxx"
+
 # ── Delivery: Gmail (direct SMTP — no Zapier needed) ─────────────────────────
 # Generate an App Password at: https://myaccount.google.com/apppasswords
 # (Requires 2-Step Verification. This is NOT your Google password.)

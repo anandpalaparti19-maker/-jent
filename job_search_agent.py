@@ -122,6 +122,7 @@ FORCE_DIRECT_GMAIL = str(_get("FORCE_DIRECT_GMAIL", "false")).lower() == "true"
 TELEGRAM_BOT_TOKEN = _get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = _get("TELEGRAM_CHAT_ID", "")
 DISCORD_WEBHOOK_URL = _get("DISCORD_WEBHOOK_URL", "")
+SENDGRID_API_KEY = _get("SENDGRID_API_KEY", "")
 
 # --- Matching ---
 RESUME_PATH = str(_get("RESUME_PATH", str(BASE_DIR / "resume.pdf")))
@@ -953,6 +954,47 @@ def send_to_zapier(job: dict) -> bool:
         return False
 
 
+def send_via_sendgrid(job: dict, to_address: str = None) -> bool:
+    """Send job match email via SendGrid API (no daily cap on paid plan).
+    Falls back silently if SENDGRID_API_KEY is not set.
+    """
+    if not SENDGRID_API_KEY:
+        return False
+    to = (to_address or GMAIL_TO_ADDRESS or "").strip()
+    if not to:
+        return False
+    from_email = GMAIL_ADDRESS or "noreply@jent.ai"
+    subject = f"Job Match ({job.get('score', 0):.0%}): {job.get('title', '')} @ {job.get('company', '')}"
+    html_body = build_html_email(job)
+    plain_body = (
+        f"New job match!\n\nTitle:    {job.get('title', '')}\n"
+        f"Company:  {job.get('company', '')}\nLocation: {job.get('location', '')}\n"
+        f"Score:    {job.get('score', 0):.3f}\nLink:     {job.get('url', '')}\n"
+    )
+    payload = {
+        "personalizations": [{"to": [{"email": to}]}],
+        "from": {"email": from_email},
+        "subject": subject,
+        "content": [
+            {"type": "text/plain", "value": plain_body},
+            {"type": "text/html",  "value": html_body},
+        ],
+    }
+    try:
+        resp = _SESSION.post(
+            "https://api.sendgrid.com/v3/mail/send",
+            json=payload,
+            headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        log.info(f"[OK] SendGrid → {to}: {job['score']:.2f}  {job['title']} @ {job.get('company', '')}")
+        return True
+    except Exception as e:
+        log.warning(f"SendGrid send failed: {e}")
+        return False
+
+
 def send_via_gmail(job: dict, to_address: str = None) -> bool:
     to = (to_address or GMAIL_TO_ADDRESS or "").strip()
     if not GMAIL_ADDRESS or not GMAIL_APP_PASSWORD or not to:
@@ -1047,11 +1089,11 @@ def send_via_discord(job: dict) -> bool:
 def notify(job: dict, to_email: str = None):
     """
     Delivery priority:
-      FORCE_DIRECT_GMAIL → Gmail only
-      Otherwise: Zapier → Gmail → Telegram → Discord → dry-run print
+      SendGrid (if key set) → Gmail → Zapier → Telegram → Discord → dry-run print
     Telegram and Discord always fire alongside the primary channel (additive).
+    SendGrid has no daily cap on paid plans; Gmail is the free fallback.
 
-    If to_email is provided, Gmail sends to that address (per-subscriber delivery).
+    If to_email is provided, email is sent to that address (per-subscriber delivery).
     """
     if _DRY_RUN:
         log.info(f"[DRY RUN] {job['score']:.2f}  {job['title']} @ {job.get('company', '')}")
@@ -1061,7 +1103,12 @@ def notify(job: dict, to_email: str = None):
     if FORCE_DIRECT_GMAIL:
         sent = send_via_gmail(job, to_address=to_email)
     else:
-        sent = send_to_zapier(job) or send_via_gmail(job, to_address=to_email)
+        # Try SendGrid first (no send limits), fall back to Gmail, then Zapier
+        sent = (
+            send_via_sendgrid(job, to_address=to_email)
+            or send_via_gmail(job, to_address=to_email)
+            or send_to_zapier(job)
+        )
 
     # Always also fire supplemental channels
     send_via_telegram(job)

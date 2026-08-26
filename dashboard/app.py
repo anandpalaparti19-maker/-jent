@@ -256,12 +256,37 @@ def api_auth_me():
     return jsonify({"user_id": uid, "profile": profile})
 
 
+# -- Auth middleware -----------------------------------------------------------
+
+from functools import wraps
+
+def require_auth(f):
+    """Decorator: reject requests with no valid jent_user_id cookie/header."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        uid = (
+            request.cookies.get("jent_user_id")
+            or request.headers.get("X-User-Id")
+            or request.args.get("user_id")
+        )
+        if not uid:
+            return jsonify({"error": "Authentication required. Please log in."}), 401
+        # Verify uid exists in users.json
+        users = db.load_users()
+        found = any(u.get("user_id") == uid for u in users.values())
+        if not found:
+            return jsonify({"error": "Invalid session. Please log in again."}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+
 # -- API Routes ---------------------------------------------------------------
 
 def _get_current_user_id():
     return request.cookies.get("jent_user_id") or request.args.get("user_id") or db.DEFAULT_USER_ID
 
 @app.route("/api/jobs")
+@require_auth
 def api_jobs():
     uid = _get_current_user_id()
     seen = load_seen(user_id=uid)
@@ -292,6 +317,7 @@ def api_jobs():
 
 
 @app.route("/api/stats")
+@require_auth
 def api_stats():
     uid = _get_current_user_id()
     seen = load_seen(user_id=uid)
@@ -322,12 +348,14 @@ def api_stats():
 
 
 @app.route("/api/log")
+@require_auth
 def api_log():
     n = int(request.args.get("n", 150))
     return jsonify({"lines": tail_log(n)})
 
 
 @app.route("/api/log/stream")
+@require_auth
 def api_log_stream():
     """Server-Sent Events stream for live log tailing."""
     def generate():
@@ -651,7 +679,28 @@ def api_resume_status():
     return jsonify({"resume": info, "has_resume": info is not None})
 
 
+def _extract_resume_text(path) -> str:
+    """Extract plain text from a PDF or DOCX resume file."""
+    ext = str(path).lower().rsplit(".", 1)[-1]
+    try:
+        if ext == "pdf":
+            import pdfplumber
+            parts = []
+            with pdfplumber.open(str(path)) as pdf:
+                for page in pdf.pages:
+                    parts.append(page.extract_text() or "")
+            return "\n".join(parts)
+        elif ext in ("docx", "doc"):
+            import docx as _docx
+            d = _docx.Document(str(path))
+            return "\n".join(p.text for p in d.paragraphs)
+    except Exception as e:
+        app.logger.warning(f"[Resume] Could not parse {path}: {e}")
+    return ""
+
+
 @app.route("/api/upload-resume", methods=["POST"])
+@require_auth
 def api_upload_resume():
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
@@ -676,15 +725,32 @@ def api_upload_resume():
     f.save(str(save_path))
     stat = save_path.stat()
 
+    # ── Extract text and save to the current user's profile ──────────────────
+    resume_text = _extract_resume_text(save_path)
+    uid = _get_current_user_id()
+    if uid and uid != db.DEFAULT_USER_ID and resume_text.strip():
+        users = db.load_users()
+        # find by user_id
+        for email, udata in users.items():
+            if udata.get("user_id") == uid:
+                udata["resume_text"] = resume_text
+                udata["resume_filename"] = save_path.name
+                udata["resume_updated_at"] = datetime.now(timezone.utc).isoformat()
+                db.save_user(udata)
+                app.logger.info(f"[Resume] Saved {len(resume_text)} chars for user {uid}")
+                break
+
     return jsonify({
         "success": True,
         "filename": save_path.name,
         "size_kb": round(stat.st_size / 1024, 1),
-        "message": f"Resume saved. It will be used in the next agent cycle.",
+        "chars_extracted": len(resume_text),
+        "message": "Resume saved and text extracted. It will be used in the next agent cycle.",
     })
 
 
 @app.route("/api/applied-jobs")
+@require_auth
 def api_applied_jobs():
     try:
         uid = _get_current_user_id()
